@@ -1,0 +1,34 @@
+{
+  "name": "youtube-notification",
+  "version": "1.0.0",
+  "description": "A youtube wrapper for https://pubsubhubbub.appspot.com/",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "eslint src/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Weirdo914/Youtube-Notification.git"
+  },
+  "keywords": [
+    "Youtube",
+    "Notifcation",
+    "Pubsub",
+    "pubsubhubbub",
+    "youtubevideo"
+  ],
+  "author": "Weirdo914",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Weirdo914/Youtube-Notification/issues"
+  },
+  "homepage": "https://github.com/Weirdo914/Youtube-Notification#readme",
+  "dependencies": {
+    "axios": "^0.19.1",
+    "express": "^4.17.1",
+    "express-xml-bodyparser": "^0.3.0"
+  },
+  "devDependencies": {
+    "eslint": "^6.8.0"
+  }
+}
