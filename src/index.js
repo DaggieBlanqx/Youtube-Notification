@@ -1,23 +1,19 @@
 'use strict';
-
 /**
  * Module dependencies.
  */
-
 const EventEmitter = require('events');
 const server = require('./server');
 const { post } = require('axios');
 const urllib = require('url');
 const qs = require('querystring');
 const crypto = require('crypto');
-
+const xmlbodyparser = require('./xmlParser');
 
 /**
  * Constants
  */
-
 const base_topic = 'https://www.youtube.com/xml/feeds/videos.xml?channel_id=';
-
 
 /**
  * Represents the YouTube Notifier Class
@@ -25,79 +21,87 @@ const base_topic = 'https://www.youtube.com/xml/feeds/videos.xml?channel_id=';
  */
 class YouTubeNotifier extends EventEmitter {
   /**
-	 * @typedef {Object} NotifierOptions
-	 * @property {string} hubCallback Your ip/domain name that will be used as a callback URL by the hub
-	 * @property {?string} [secret=undefined] The secret for the requests to hub
+   * @typedef {Object} NotifierOptions
+   * @property {string} hubCallback Your ip/domain name that will be used as a callback URL by the hub
+   * @property {?string} [secret=undefined] The secret for the requests to hub
    * @property {boolean} [middleware=false] If you are going to use the Notifier with a middleware
    * @property {?number} [port=3000] An open port on your system to listen on. Defaults to port 3000 or undefined
    * @property {?string} [path='/'] The path on which server will interact with the hub
    * @property {?string} [hubUrl='https://pubsubhubbub.appspot.com/'] The hub url. It is advised not to change this.
-	 */
+   */
 
   /**
-	 * @since 1.0.0
+   * @since 1.0.0
    * @constructor
-	 * @param {NotifierOptions} [options={}] The options for the notifier
-	 */
+   * @param {NotifierOptions} [options={}] The options for the notifier
+   */
   constructor(options = {}) {
     if (!options.hubCallback) throw new Error('You need to provide the callback URL.');
     super();
 
     /**
-		 * The options the notifier was instantiated with.
-		 * @since 1.0.0
-		 * @name YouTubeNotifier#options
-		 * @type {NotifierOptions}
-		 */
+     * The options the notifier was instantiated with.
+     * @since 1.0.0
+     * @name YouTubeNotifier#options
+     * @type {NotifierOptions}
+     */
 
     /**
-		 * The ip/domain name that will be used as a callback URL by the hub
-		 * @since 1.0.0
-		 * @type {string}
-		 */
+     * The ip/domain name that will be used as a callback URL by the hub
+     * @since 1.0.0
+     * @type {string}
+     */
     this.hubCallback = options.hubCallback;
 
     /**
-		 * The hub URL
-		 * @since 1.0.0
-		 * @type {string}
-		 */
+     * The hub URL
+     * @since 1.0.0
+     * @type {string}
+     */
     this.hubUrl = options.hubUrl || 'https://pubsubhubbub.appspot.com/';
 
     /**
-		 * The secretkey for the requests to hub
-		 * @since 1.0.0
-		 * @type {?string}
-		 */
+     * The secretkey for the requests to hub
+     * @since 1.0.0
+     * @type {?string}
+     */
     this.secret = options.secret;
 
     /**
-		 * If the notifier will be used with a middleware
-		 * @since 1.0.0
-		 * @type {boolean}
-		 */
+     * If the notifier will be used with a middleware
+     * @since 1.0.0
+     * @type {boolean}
+     */
     this.middleware = Boolean(options.middleware);
 
     /**
-		 * The port to listen on
-		 * @since 1.0.0
-		 * @type {number}
-		 */
+     * The port to listen on
+     * @since 1.0.0
+     * @type {number}
+     */
     this.port = options.port || 3000;
 
     /**
-		 * The path on which server will interact with the hub
-		 * @since 1.0.0
-		 * @type {string}
-		 */
+     * The path on which server will interact with the hub
+     * @since 1.0.0
+     * @type {string}
+     */
     this.path = options.path || '/';
 
     /**
      * The server to interact with the hub
-		 * @since 1.0.0
-		 * @type {Express}
+     * @since 1.0.0
+     * @type {Express|null}
      */
     this.server = null;
+
+    /**
+     * Array of recieved channels to ignore duplicate update for
+     * @since 1.1.0
+     * @private
+     * @type {string[]}
+     */
+    this._recieved = [];
   }
 
   /**
@@ -108,6 +112,7 @@ class YouTubeNotifier extends EventEmitter {
    */
   setup() {
     if (this.middleware) throw new Error('You cannot setup a server if you are using middleware.');
+    if (this.server) throw new Error('The Server has been already setup.');
     this.server = server(this);
     this.server.listen(this.port);
   }
@@ -121,7 +126,7 @@ class YouTubeNotifier extends EventEmitter {
    */
   listener() {
     return (req, res) => {
-      this._onRequest(req, res);
+      xmlbodyparser(req, res, this);
     };
   }
 
@@ -134,7 +139,11 @@ class YouTubeNotifier extends EventEmitter {
     if (
       !channels ||
       (typeof channels !== 'string' && !Array.isArray(channels))
-    ) throw new Error('You need to provide a channel id or an array of channel ids.');
+    ) {
+      throw new Error(
+        'You need to provide a channel id or an array of channel ids.',
+      );
+    }
     if (typeof channels === 'string') {
       this._makeRequest(channels, 'subscribe');
     } else {
@@ -151,9 +160,13 @@ class YouTubeNotifier extends EventEmitter {
     if (
       !channels ||
       (typeof channels !== 'string' && !Array.isArray(channels))
-    ) throw new Error('You need to provide a channel id or an array of channel ids.');
+    ) {
+      throw new Error(
+        'You need to provide a channel id or an array of channel ids.',
+      );
+    }
     if (typeof channels === 'string') {
-      this.makeRequest(channels, 'unsubscribe');
+      this._makeRequest(channels, 'unsubscribe');
     } else {
       channels.forEach(channel => this._makeRequest(channel, 'unsubscribe'));
     }
@@ -162,6 +175,7 @@ class YouTubeNotifier extends EventEmitter {
   /**
    * Subsribe or unsubscribe to a channel
    * @since 1.0.0
+   * @private
    * @param {string} channel_id The id of the channel to subscribe or unsubscribe to
    * @param {string} type Either 'subscribe' or 'unsubscribe'
    */
@@ -213,7 +227,8 @@ class YouTubeNotifier extends EventEmitter {
 
     // Invalid request
     if (!params['hub.topic'] || !params['hub.mode']) {
-      return res.status(400)
+      return res
+        .status(400)
         .set('Content-Type', 'text/plain')
         .end('Bad Request');
     }
@@ -256,7 +271,8 @@ class YouTubeNotifier extends EventEmitter {
     let body = req.body.feed.entry;
     // Invalid Entry
     if (!body) {
-      return res.status(400)
+      return res
+        .status(400)
         .set('Content-Type', 'text/plain')
         .end('Bad Request');
     }
@@ -283,9 +299,22 @@ class YouTubeNotifier extends EventEmitter {
       }
     }
 
+    let vidId = body['yt:videoid'][0];
+    let publishTIme = new Date(body.published[0]);
+    let updateTime = new Date(body.updated[0]);
+
+    if (this._recieved.includes(vidId)) {
+      this._recieved.splice(this._recieved.indexOf(vidId), 1);
+      return res.sendStatus(200);
+    }
+
+    if (updateTime - publishTIme < 300000) {
+      this._recieved.push(vidId);
+    }
+
     let data = {
       video: {
-        id: body['yt:videoid'][0],
+        id: vidId,
         title: body.title[0],
         link: body.link[0].$.href,
       },
@@ -294,8 +323,8 @@ class YouTubeNotifier extends EventEmitter {
         name: body.author[0].name[0],
         link: body.author[0].uri[0],
       },
-      published: body.published[0],
-      updated: body.updated[0],
+      published: publishTIme,
+      updated: updateTime,
     };
 
     this.emit('notified', data);

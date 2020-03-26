@@ -1,26 +1,20 @@
 'use strict';
-
 /**
  * Module dependencies.
  */
-
 const express = require('express');
-var xmlparser = require('express-xml-bodyparser');
 
 /**
  * Setup the server
  */
 const app = express();
-app.use(xmlparser());
-
 
 /**
  * Returns the server.
  *
  * @param {YouTubeNotifier} notifier The notifier object
- * @return {Express}
+ * @return {Express} A new express server
  */
-
 function server(notifier) {
   app.use(notifier.path, notifier.listener());
 

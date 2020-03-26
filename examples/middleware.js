@@ -1,9 +1,6 @@
 'use strict';
-
 const express = require('express');
-const YouTubeNotifier = require('../src/index');
-var xmlparser = require('express-xml-bodyparser');
-
+const YouTubeNotifier = require('youtube-notification');
 
 const app = express();
 const notifier = new YouTubeNotifier({
@@ -11,8 +8,6 @@ const notifier = new YouTubeNotifier({
   secret: 'Something',
 });
 
-
-app.use(xmlparser());
 app.use('/youtube', notifier.listener());
 app.listen(3000);
 

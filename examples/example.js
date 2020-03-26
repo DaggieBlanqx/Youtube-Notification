@@ -1,7 +1,5 @@
 'use strict';
-
-const YouTubeNotifier = require('../src/index');
-
+const YouTubeNotifier = require('youtube-notification');
 
 const notifier = new YouTubeNotifier({
   hubCallback: 'https://example.com/youtube',
